@@ -84,7 +84,7 @@ class GraphWalker:
 
     def print_route(self):
         print('Current longest route:')
-        mapped_steps = map(route_map, self.route)
+        mapped_steps = map(route_map, self.max_route)
         mapped_steps = simplify(mapped_steps)
 
         is_start = True
@@ -214,9 +214,9 @@ class GraphWalker:
 
 
 nodes = load_json_from_file('graph.json')
-start_stations = [9, 1, 80, 29, 83, 69, 33, 41, 59, 5, 20]
+start_stations = [80, 9, 1, 29, 83, 69, 33, 41, 59, 5, 20]
 
-random.shuffle(start_stations)
+#random.shuffle(start_stations)
 walker = GraphWalker()
 
 signal.signal(signal.SIGINT, signal_handler)
