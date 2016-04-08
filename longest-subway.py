@@ -214,9 +214,12 @@ class GraphWalker:
 
 
 nodes = load_json_from_file('graph.json')
-start_stations = [80, 9, 1, 29, 83, 69, 33, 41, 59, 5, 20]
+start_stations = [9, 80, 1, 29, 83, 69, 33, 41, 59, 5, 20]
 
-#random.shuffle(start_stations)
+# For pruned json:
+#start_stations = [9, 80]
+
+random.shuffle(start_stations)
 walker = GraphWalker()
 
 signal.signal(signal.SIGINT, signal_handler)
