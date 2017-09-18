@@ -1,16 +1,14 @@
 from datetime import datetime
+from multiprocessing import Manager, Pool, Process, Queue
 import json
 import random
 import signal
+import traceback
 
 
 def load_json_from_file(filename):
     with open(filename, 'r') as f:
         return json.loads(f.read())
-
-
-def signal_handler(signal, frame):
-    walker.print_progress()
 
 
 def route_map(x):
@@ -66,7 +64,7 @@ def simplify(route):
 
 
 class GraphWalker:
-    def __init__(self):
+    def __init__(self, pqueue):
         self.dead_ends = 0
 
         self.distance = 0
@@ -74,31 +72,7 @@ class GraphWalker:
 
         self.max_distance = 0
         self.max_route = []
-
-    def print_progress(self):
-        self.print_route()
-        print('')
-        print('Traversed ' + str(self.dead_ends) + ' routes')
-        print('Longest route so far: ' + str(self.max_distance) + ' feet')
-        print('Current route length: ' + str(self.distance) + ' feet')
-
-    def print_route(self):
-        print('Current longest route:')
-        mapped_steps = map(route_map, self.max_route)
-        mapped_steps = simplify(mapped_steps)
-
-        is_start = True
-        last_step = None
-
-        for step in mapped_steps:
-            if is_start:
-                print('[#] Start at ' + step['from'])
-                is_start = False
-            elif last_step and step['from'] != last_step['to']:
-                print('[#] Transfer to ' + step['from'])
-
-            print('[#] Take the ' + step['line'] + ' to ' + step['to'])
-            last_step = step
+        self.queue = pqueue
 
     def traverse_from_start(self, start_station):
         start_station = str(start_station)
@@ -185,12 +159,7 @@ class GraphWalker:
 
         self.max_distance = self.distance
         self.max_route = self.route[:]
-
-        print('')
-        print('[' + str(datetime.now()) + ']')
-        print('Found a new maximum subway route, report progress for details')
-        print('distance = ' + str(self.max_distance))
-        print('')
+        self.queue.put((self.max_distance, self.max_route), True)
 
     def first_step(self, start):
         segment = nodes['stations'][str(start)]['segments'][0]
@@ -216,18 +185,78 @@ class GraphWalker:
                 random.shuffle(station['segments'])
 
 
-nodes = load_json_from_file('graph.json')
-start_stations = [9, 80, 1, 29, 83, 69, 33, 41, 59, 5, 20]
+def print_progress(distance, max_route):
+    print_route(max_route)
+    print('')
+    print('Longest route so far: ' + str(distance) + ' feet')
 
-# For pruned json:
-#start_stations = [9, 80]
 
-random.shuffle(start_stations)
-walker = GraphWalker()
+def print_route(max_route):
+    print('Current longest route:')
+    mapped_steps = map(route_map, max_route)
+    mapped_steps = simplify(mapped_steps)
 
-signal.signal(signal.SIGINT, signal_handler)
-while True:
-    start_station = start_stations.pop(0)
-    start_stations.append(start_station)
+    is_start = True
+    last_step = None
 
-    walker.traverse_from_start(start_station)
+    for step in mapped_steps:
+        if is_start:
+            print('[#] Start at ' + step['from'])
+            is_start = False
+        elif last_step and step['from'] != last_step['to']:
+            print('[#] Transfer to ' + step['from'])
+
+        print('[#] Take the ' + step['line'] + ' to ' + step['to'])
+        last_step = step
+
+def setup_nodes():
+    global nodes
+    nodes = load_json_from_file('graph.json')
+
+
+def walker((queue, station)):
+    try:
+        walker = GraphWalker(queue)
+        walker.traverse_from_start(station)
+    except Exception as e:
+        print traceback.format_exc()
+
+    return station
+
+
+def test((queue, station)):
+    return station
+
+
+if __name__ == '__main__':
+    setup_nodes()
+    start_stations = [9, 80, 1, 29, 83, 69, 33, 41, 59, 5, 20]
+
+    pool = Pool(12, initializer=setup_nodes)
+    manager = Manager()
+    queue = manager.Queue()
+    args = [(queue, station, ) for station in start_stations]
+
+    result = pool.map_async(walker, args)
+    pool.close()
+
+    max_distance = 0
+    max_route = []
+
+    while not result.ready():
+        if not queue.empty():
+            item = queue.get(True)
+            distance, route = item[0], item[1]
+
+            if distance > max_distance:
+                max_distance = distance
+                max_route = route
+
+                print('')
+                print('[' + str(datetime.now()) + ']')
+                print('Found a new maximum subway route')
+                print_progress(max_distance, max_route)
+                print('')
+
+    print result.successful()
+    print result.get()
