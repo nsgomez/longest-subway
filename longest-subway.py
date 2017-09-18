@@ -126,6 +126,9 @@ class GraphWalker:
             can_step = self.step_backward()
 
     def step_forward(self, min_index=-1):
+        if len(self.route) == 0:
+            return False
+
         last_step = self.route[-1]
         current_station = last_step['to']
 
